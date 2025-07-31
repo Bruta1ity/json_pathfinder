@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>JSON Pathfinder</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+    <style>
+        :root {
+            --bg-color: #282c34; --text-color: #abb2bf; --panel-bg: #21252b;
+            --key-color: #e06c75; --string-color: #98c379; --number-color: #d19a66;
+            --bool-null-color: #c678dd; --border-color: #3f444f;
+            --highlight-bg: #3e4451; --button-bg: #4d78cc; --button-hover-bg: #61afef;
+        }
+        body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; }
+        .container { display: flex; height: calc(100vh - 20px); padding: 10px; gap: 10px; }
+        .panel { flex: 1; display: flex; flex-direction: column; background: var(--panel-bg); border-radius: 8px; border: 1px solid var(--border-color); }
+        textarea { flex-grow: 1; border: none; padding: 15px; font-family: 'Fira Code', 'Courier New', monospace; font-size: 14px; resize: none; background: transparent; color: var(--text-color); outline: none; }
+        .controls { padding: 10px; display: flex; gap: 10px; border-top: 1px solid var(--border-color); }
+        button { background: var(--button-bg); color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 14px; transition: background-color 0.2s; }
+        button:hover { background: var(--button-hover-bg); }
+        button:disabled { background: #555; cursor: not-allowed; }
+        .output-panel { overflow: auto; }
+        #path-bar { display: flex; align-items: center; gap: 10px; padding: 5px 10px; background-color: #2c313a; border-bottom: 1px solid var(--border-color); }
+        #path-breadcrumbs { display: flex; flex-wrap: wrap; align-items: center; flex-grow: 1; min-height: 24px; }
+        .path-segment { background: #3a3f4b; padding: 4px 8px; border-radius: 4px; cursor: pointer; margin: 2px; }
+         #data-type-display {
+            background-color: var(--brace-color);
+            color: #fff;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: auto;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        #data-type-display.visible {
+            opacity: 1;
+        }
+        #copy-path-btn { padding: 4px 10px; font-size: 12px; }
+        #interactive-json-tree { padding: 15px; font-family: 'Fira Code', 'Courier New', monospace; font-size: 14px; line-height: 1.8; }
+        #interactive-json-tree ul, #interactive-json-tree ol { list-style: none; padding-left: 2em; margin: 0; border-left: 1px solid var(--border-color); }
+        #interactive-json-tree li { border-radius: 4px; }
+        #interactive-json-tree li:hover { background-color: var(--highlight-bg); }
+        .row-content { padding: 2px 5px; }
+        .json-key, .json-value, .array-index { cursor: pointer; }
+        .json-key { color: var(--key-color); }
+        .json-string { color: var(--string-color); }
+        .json-number { color: var(--number-color); }
+        .json-boolean, .json-null { color: var(--bool-null-color); }
+        .selected-path-element { background-color: var(--button-hover-bg) !important; color: #fff; border-radius: 3px; padding: 1px 3px; }
+        .toggler, .array-index { color: #61afef; }
+        .toggler::before, .array-index::before { content: '▼'; font-size: 0.8em; transition: transform 0.2s; display: inline-block; width: 1em; }
+        .toggler.collapsed::before, .array-index.collapsed::before { transform: rotate(-90deg); }
+        .collapsed-content { display: none; }
+        .flash-error { padding: 15px; background: #5c2b2f; color: #ff8c8e; margin: 10px; border-radius: 5px; }
+        .panel-header {
+                        display: flex;
+                        align-items: center;
+                        padding: 10px 15px;
+                        background-color: #2c313a;
+                        border-bottom: 1px solid var(--border-color);
+                    }
+                    .panel-header img {
+                        height: 30px;
+                        margin-right: 10px;
+                    }
+                    .panel-header h2 {
+                        margin: 0;
+                        font-size: 16px;
+                        font-weight: 500;
+                        color: var(--text-color);
+                    }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Левая панель -->
+        <div class="panel">
+            <div class="panel-header">
+        <img src="{{ url_for('static', filename='images/icon.png') }}" alt="Icon">
+    </div>
+            <form id="json-form" method="post" style="display: flex; flex-direction: column; height: 100%;">
+                <textarea name="json_text" id="json-input" placeholder="Вставьте ваш JSON сюда...">{{ raw_json_text }}</textarea>
+                <div class="controls">
+                    <button type="submit">Get Paths!</button>
+                    <button type="button" id="beautify-btn">Beautify JSON</button>
+                </div>
+            </form>
+        </div>
+        <!-- Правая панель -->
+        <div class="panel output-panel">
+             <div class="panel-header">
+        <h2>Result</h2>
+    </div>
+            <div id="path-bar">
+                <div id="path-breadcrumbs"></div>
+                <span id="data-type-display"></span>
+                <button id="copy-path-btn" disabled>Copy</button>
+            </div>
+            {% with messages = get_flashed_messages() %}{% if messages %}{% for message in messages %}<div class="flash-error">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+            <div id="interactive-json-tree">{{ interactive_html|safe }}</div>
+        </div>
+    </div>
+
+    <!-- ИСПРАВЛЕНО: Этот блок теперь работает корректно -->
+    {% if json_data %}
+    <script>const jsonData = {{ json_data|tojson|safe }};</script>
+    {% endif %}
+
+    <!-- ... Весь HTML до блока script остается без изменений ... -->
+<script>
+    const jsonInput = document.getElementById('json-input');
+    const beautifyBtn = document.getElementById('beautify-btn');
+    const treeContainer = document.getElementById('interactive-json-tree');
+    const breadcrumbsContainer = document.getElementById('path-breadcrumbs');
+    const copyPathBtn = document.getElementById('copy-path-btn');
+    const dataTypeDisplay = document.getElementById('data-type-display');
+
+    let highlightedElement = null;
+    let currentSelectedPath = null;
+
+    // --- 1. Beautifier (без изменений) ---
+    beautifyBtn.addEventListener('click', () => {
+        try {
+            const jsonObj = JSON.parse(jsonInput.value);
+            jsonInput.value = JSON.stringify(jsonObj, null, 4);
+        } catch (e) { alert('Невалидный JSON. Невозможно отформатировать.'); }
+    });
+
+    // --- 2. Tree Interaction (без изменений) ---
+    treeContainer.addEventListener('click', (event) => {
+        const target = event.target;
+
+        if (target.classList.contains('toggler') || target.classList.contains('array-index')) {
+            const wrapper = target.closest('.node-wrapper, li');
+            const content = wrapper.querySelector('ul, ol');
+            if (content) {
+                target.classList.toggle('collapsed');
+                content.classList.toggle('collapsed-content');
+            }
+        }
+
+        if (target.hasAttribute('data-path')) {
+            const path = target.getAttribute('data-path');
+            handlePathSelection(path, target);
+        }
+    });
+
+    // --- 3. Path Selection and Copy Logic (ИСПРАВЛЕНО) ---
+    function handlePathSelection(path, element) {
+        currentSelectedPath = path;
+        updateBreadcrumbs(path);
+        highlightElement(element);
+        const value = getValueByPath(jsonData, path);
+        const type = getDataType(value);
+        dataTypeDisplay.textContent = type;
+        dataTypeDisplay.classList.add('visible');
+        copyPathBtn.disabled = false;
+        copyTextToClipboard(path);
+    }
+function getValueByPath(obj, path) {
+    if (!obj || path === '$') return obj;
+
+    const pathSegmentsRegex = /\.([a-zA-Z_][a-zA-Z0-9_]*)|\[(\d+)\]|\['([^']+?)'\]/g;
+    const segments = Array.from(path.matchAll(pathSegmentsRegex));
+
+    let current = obj;
+    for (const segment of segments) {
+        if (current === undefined || current === null) return undefined;
+        const key = segment[1] || segment[2] || segment[3];
+        current = current[key];
+    }
+
+    return current;
+}
+
+    function getDataType(value) {
+            if (value === null) return 'Unknown';
+            if (Array.isArray(value)) return 'Array';
+            const type = typeof value;
+            return type.charAt(0).toUpperCase() + type.slice(1);
+        }
+
+
+
+    copyPathBtn.addEventListener('click', () => {
+        if (currentSelectedPath) {
+            copyTextToClipboard(currentSelectedPath).then(success => {
+                if (success) {
+                    const originalText = copyPathBtn.textContent;
+                    copyPathBtn.textContent = 'Copied!';
+                    setTimeout(() => { copyPathBtn.textContent = originalText; }, 1500);
+                } else {
+                    alert('Не удалось скопировать путь. Пожалуйста, скопируйте его вручную.');
+                }
+            });
+        }
+    });
+
+    /**
+     * НОВАЯ, БОЛЕЕ НАДЕЖНАЯ ФУНКЦИЯ КОПИРОВАНИЯ
+     * Сначала пытается использовать современный Clipboard API,
+     * если не удается - использует старый метод execCommand.
+     * Возвращает Promise, который разрешается в true (успех) или false (неудача).
+     */
+    function copyTextToClipboard(text) {
+        // Пробуем новый API, если он доступен и страница защищена
+        if (navigator.clipboard && window.isSecureContext) {
+            return navigator.clipboard.writeText(text).then(() => true, () => false);
+        } else {
+            // Используем старый метод для HTTP или старых браузеров
+            return new Promise((resolve) => {
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                // Скрываем элемент от пользователя
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-9999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                try {
+                    const successful = document.execCommand('copy');
+                    resolve(successful);
+                } catch (err) {
+                    resolve(false);
+                } finally {
+                    document.body.removeChild(textArea);
+                }
+            });
+        }
+    }
+
+    // --- 4. Breadcrumbs Logic (без изменений) ---
+    function updateBreadcrumbs(path) {
+        breadcrumbsContainer.innerHTML = '';
+
+        const parsablePath = path.replace(/\.([a-zA-Z_][a-zA-Z0-9_]*)/g, "['$1']");
+
+        let currentPathForSegment = '$';
+        addBreadcrumbSegment('$', '$');
+
+        const segments = parsablePath.matchAll(/\['([^']+?)'\]|\[(\d+)\]/g);
+        for (const match of segments) {
+            const key = match[1] || match[2];
+            currentPathForSegment += match[0];
+            const originalPath = currentPathForSegment.replace(/\['([a-zA-Z_][a-zA-Z0-9_]*)'\]/g, '.$1');
+            addBreadcrumbSegment(key, originalPath);
+        }
+    }
+
+    function addBreadcrumbSegment(text, path) {
+        const segmentEl = document.createElement('span');
+        segmentEl.className = 'path-segment';
+        segmentEl.textContent = text;
+        segmentEl.dataset.path = path;
+        breadcrumbsContainer.appendChild(segmentEl);
+    }
+
+    breadcrumbsContainer.addEventListener('click', (event) => {
+        const target = event.target;
+        if (target.classList.contains('path-segment')) {
+            const path = target.dataset.path;
+            const elementInTree = treeContainer.querySelector(`[data-path="${path}"]`);
+            if (elementInTree) {
+                handlePathSelection(path, elementInTree);
+                elementInTree.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+    });
+
+    // --- 5. Highlighting (без изменений) ---
+    function highlightElement(element) {
+        if (highlightedElement) {
+            highlightedElement.classList.remove('selected-path-element');
+        }
+        element.classList.add('selected-path-element');
+        highlightedElement = element;
+    }
+</script>
+</body>
+</html>
