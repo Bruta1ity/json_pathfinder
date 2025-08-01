@@ -50,7 +50,7 @@ def build_clean_html(data, path='$'):
 def index():
     raw_json_text = ''
     interactive_html = ''
-    json_data = None  # ИСПРАВЛЕНО: Инициализируем переменную как None
+    json_data = None
 
     if request.method == 'POST':
         raw_json_text = request.form.get('json_text', '')
@@ -61,9 +61,8 @@ def index():
             except json.JSONDecodeError:
                 flash('Ошибка: Невалидный JSON. Пожалуйста, проверьте синтаксис.')
                 interactive_html = ''
-                json_data = None  # Сбрасываем при ошибке
+                json_data = None
 
-    # ИСПРАВЛЕНО: Всегда передаем json_data в шаблон
     return render_template(
         'index.html',
         raw_json_text=raw_json_text,
