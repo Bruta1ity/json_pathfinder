@@ -75,7 +75,6 @@
 </head>
 <body>
     <div class="container">
-        <!-- Левая панель -->
         <div class="panel">
             <div class="panel-header">
         <img src="{{ url_for('static', filename='images/icon.png') }}" alt="Icon">
@@ -88,7 +87,6 @@
                 </div>
             </form>
         </div>
-        <!-- Правая панель -->
         <div class="panel output-panel">
              <div class="panel-header">
         <h2>Result</h2>
@@ -103,12 +101,10 @@
         </div>
     </div>
 
-    <!-- ИСПРАВЛЕНО: Этот блок теперь работает корректно -->
     {% if json_data %}
     <script>const jsonData = {{ json_data|tojson|safe }};</script>
     {% endif %}
 
-    <!-- ... Весь HTML до блока script остается без изменений ... -->
 <script>
     const jsonInput = document.getElementById('json-input');
     const beautifyBtn = document.getElementById('beautify-btn');
@@ -120,7 +116,6 @@
     let highlightedElement = null;
     let currentSelectedPath = null;
 
-    // --- 1. Beautifier (без изменений) ---
     beautifyBtn.addEventListener('click', () => {
         try {
             const jsonObj = JSON.parse(jsonInput.value);
@@ -128,7 +123,6 @@
         } catch (e) { alert('Невалидный JSON. Невозможно отформатировать.'); }
     });
 
-    // --- 2. Tree Interaction (без изменений) ---
     treeContainer.addEventListener('click', (event) => {
         const target = event.target;
 
@@ -147,7 +141,6 @@
         }
     });
 
-    // --- 3. Path Selection and Copy Logic (ИСПРАВЛЕНО) ---
     function handlePathSelection(path, element) {
         currentSelectedPath = path;
         updateBreadcrumbs(path);
@@ -198,22 +191,13 @@ function getValueByPath(obj, path) {
         }
     });
 
-    /**
-     * НОВАЯ, БОЛЕЕ НАДЕЖНАЯ ФУНКЦИЯ КОПИРОВАНИЯ
-     * Сначала пытается использовать современный Clipboard API,
-     * если не удается - использует старый метод execCommand.
-     * Возвращает Promise, который разрешается в true (успех) или false (неудача).
-     */
     function copyTextToClipboard(text) {
-        // Пробуем новый API, если он доступен и страница защищена
         if (navigator.clipboard && window.isSecureContext) {
             return navigator.clipboard.writeText(text).then(() => true, () => false);
         } else {
-            // Используем старый метод для HTTP или старых браузеров
             return new Promise((resolve) => {
                 const textArea = document.createElement("textarea");
                 textArea.value = text;
-                // Скрываем элемент от пользователя
                 textArea.style.position = 'fixed';
                 textArea.style.left = '-9999px';
                 document.body.appendChild(textArea);
@@ -231,7 +215,6 @@ function getValueByPath(obj, path) {
         }
     }
 
-    // --- 4. Breadcrumbs Logic (без изменений) ---
     function updateBreadcrumbs(path) {
         breadcrumbsContainer.innerHTML = '';
 
@@ -269,7 +252,6 @@ function getValueByPath(obj, path) {
         }
     });
 
-    // --- 5. Highlighting (без изменений) ---
     function highlightElement(element) {
         if (highlightedElement) {
             highlightedElement.classList.remove('selected-path-element');
